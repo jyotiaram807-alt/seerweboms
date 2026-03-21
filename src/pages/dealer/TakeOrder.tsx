@@ -7,26 +7,22 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Minus, Plus, Trash2, Phone, MapPin, Mic, Search } from "lucide-react";
+import {
+  Minus, Plus, Trash2, Phone, MapPin, Search,
+  ShoppingCart, User, Store, Package, X,
+} from "lucide-react";
 import { Product } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { useVoiceOrder } from "@/hooks/useVoiceOrder";
 import VoiceMicButton from "@/components/voice/VoiceMicButton";
 import VoiceFallbackModal from "@/components/voice/VoiceFallbackModal";
-
-
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
-import SearchBar from "@/components/SearchBar";
 import ProductCard from "@/components/ProductCard";
 import { useAuth } from "@/context/AuthContext";
 import { apiUrl } from "@/url";
@@ -34,586 +30,585 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import Sidebar from "@/components/Sidebar";
 
 interface Retailer {
-  id: number;
-  name: string;
-  city: string;
-  phone: string;
-  email: string;
-  address: string;
+  id:         number;
+  name:       string;
+  city:       string;
+  phone:      string;
+  email:      string;
+  address:    string;
   store_name: string;
 }
 
-// Demo products simulating the dealer's catalog - replace with API data in production
-
 const TakeOrder = () => {
-  const { cart, addToCart, removeFromCart, updateQuantity, clearCart } = useCart();
-  const [searchQuery, setSearchQuery] = useState("");
+  const {
+    cart, addToCart, removeFromCart, removeVariant,
+    updateQuantity, updateVariantQty,
+    clearCart, cartTotal, cartCount,
+  } = useCart();
+
+  const [searchQuery, setSearchQuery]         = useState("");
   const [isOrderConfirmOpen, setIsOrderConfirmOpen] = useState(false);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes]                     = useState("");
   const [showFallbackModal, setShowFallbackModal] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts]               = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
-  const [productsError, setProductsError] = useState("");
-  const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
-  const isMobile = useIsMobile();
+  const [productsError, setProductsError]     = useState("");
+  const { user, isAuthenticated }             = useAuth();
+  const navigate                              = useNavigate();
+  const isMobile                              = useIsMobile();
   const [filteredRetailers, setFilteredRetailers] = useState<Retailer[]>([]);
-  const [retailers, setRetailers] = useState<Retailer[]>([]);
+  const [retailers, setRetailers]             = useState<Retailer[]>([]);
   const [selectedRetailer, setSelectedRetailer] = useState<Retailer | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("retailers");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-    // Auth protection
+  const [activeTab, setActiveTab]             = useState<string>("retailers");
+  const [isSubmitting, setIsSubmitting]       = useState(false);
+  const [retailerSearch, setRetailerSearch]   = useState("");
+
+  // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate("/");
-      return;
-    }
-    if (user?.role !== "dealer") {
-      navigate("/home");
-      return;
-    }
+    if (!isAuthenticated) { navigate("/"); return; }
+    if (user?.role !== "dealer") { navigate("/retailer/dashboard"); return; }
   }, [isAuthenticated, user, navigate]);
 
-  // 📦 Fetch retailers for this executive
+  // ── Fetch retailers ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
-
-    const fetchRetailers = async () => {
+    (async () => {
       try {
         const token = localStorage.getItem("token");
-        if (!token) {
-          console.error("Unauthorized: Token not found");
-          return;
-        }
-
-        const response = await fetch(`${apiUrl}/retailers?dealerid=${user.id}`, {
-          headers: {
-            "Authorization": `Bearer ${token}`, // ✅ Secure JWT
-            "Content-Type": "application/json",
-          },
+        const res   = await fetch(`${apiUrl}/retailers?dealerid=${user.id}`, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         });
-
-        if (!response.ok) throw new Error("Failed to fetch retailers");
-
-        const data = await response.json();
+        if (!res.ok) throw new Error();
+        const data = await res.json();
         setRetailers(data);
         setFilteredRetailers(data);
-      } catch (err) {
-        console.error("Retailers fetch error:", err);
-      }
-    };
-
-    fetchRetailers();
+      } catch { console.error("Retailers fetch error"); }
+    })();
   }, [user?.id]);
 
+  // ── Fetch products ────────────────────────────────────────────────────────
   useEffect(() => {
-    const fetchProducts = async () => {
+    (async () => {
       try {
         setLoadingProducts(true);
-
-        const response = await fetch(`${apiUrl}/products?dealerid=${user?.id}`); // 🔥 change to your API
-        if (!response.ok) throw new Error("Failed to fetch products");
-
-        const data = await response.json();
-
-        // If API returns { products: [...] }
+        const token = localStorage.getItem("token");
+        const res   = await fetch(`${apiUrl}/products?dealerid=${user?.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
         setProducts(data.products || data);
-
-      } catch (error) {
-        console.error(error);
+      } catch {
         setProductsError("Unable to load products");
       } finally {
         setLoadingProducts(false);
       }
-    };
+    })();
+  }, [user?.id]);
 
-    fetchProducts();
-  }, []);
-
+  // ── Voice ─────────────────────────────────────────────────────────────────
   const {
-    voiceState,
-    rawTranscript,
-    parseResult,
-    errorMessage,
-    startListening,
-    stopListening,
-    reprocessTranscript,
-    reset: resetVoice,
+    voiceState, rawTranscript, parseResult, errorMessage,
+    startListening, stopListening, reprocessTranscript, reset: resetVoice,
   } = useVoiceOrder({ products });
 
-  const handleRetailerSearch = (query: string) => {
-    if (!query.trim()) {
-      setFilteredRetailers(retailers);
-      return;
-    }
-    const lowerQuery = query.toLowerCase();
-    const filtered = retailers.filter(
-      (r) =>
-        r.name.toLowerCase().includes(lowerQuery) ||
-        r.address.toLowerCase().includes(lowerQuery) ||
-        r.phone.toLowerCase().includes(lowerQuery) ||
-        r.store_name.toLowerCase().includes(lowerQuery)
-    );
-    setFilteredRetailers(filtered);
-  };
+  const handleVoiceStart = useCallback(() => { resetVoice(); startListening(); }, [resetVoice, startListening]);
 
-  // Filter products
-  const filteredProducts = searchQuery.trim()
-    ? products.filter(
-        (p) =>
-          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.model.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : products;
-
-  // Handle voice state changes
-  const handleVoiceStart = useCallback(() => {
-    resetVoice();
-    startListening();
-  }, [resetVoice, startListening]);
-
-  // Auto-add high confidence items or show fallback
   const handleVoiceAutoAdd = useCallback(() => {
     if (!parseResult) return;
-    
     if (voiceState === "success") {
-      // All items are high confidence - add them directly
       let addedCount = 0;
       parseResult.parsed.forEach((item) => {
         const product = products.find((p) => p.id === item.productId);
-        if (product) {
-          addToCart(product, item.quantity);
-          addedCount++;
-        }
+        if (product) { addToCart(product, item.quantity); addedCount++; }
       });
-      if (addedCount > 0) {
-        toast.success(`✅ Added ${addedCount} product(s) to cart`);
-      }
+      if (addedCount > 0) toast.success(`Added ${addedCount} product(s) to cart`);
       resetVoice();
     } else if (voiceState === "fallback" || voiceState === "error") {
       setShowFallbackModal(true);
     }
   }, [parseResult, voiceState, products, addToCart, resetVoice]);
 
-  // Effect: auto-process when voice state changes
-  if (voiceState === "success" && parseResult && !showFallbackModal) {
-    // Use setTimeout to avoid calling during render
+  if (voiceState === "success" && parseResult && !showFallbackModal)
     setTimeout(() => handleVoiceAutoAdd(), 0);
-  }
-  if ((voiceState === "fallback" || (voiceState === "error" && rawTranscript)) && !showFallbackModal) {
+  if ((voiceState === "fallback" || (voiceState === "error" && rawTranscript)) && !showFallbackModal)
     setTimeout(() => setShowFallbackModal(true), 0);
-  }
 
-
-
-  // Handle confirmed items from fallback modal
   const handleConfirmItems = (items: { productId: string; quantity: number }[]) => {
-    let addedCount = 0;
+    let count = 0;
     items.forEach(({ productId, quantity }) => {
-      const product = products.find((p) => p.id === productId);
-      if (product) {
-        addToCart(product, quantity);
-        addedCount++;
-      }
+      const p = products.find((x) => x.id === productId);
+      if (p) { addToCart(p, quantity); count++; }
     });
-    if (addedCount > 0) {
-      toast.success(`✅ Added ${addedCount} product(s) to cart`);
-    }
+    if (count > 0) toast.success(`Added ${count} product(s) to cart`);
     resetVoice();
   };
 
-  const handleQuantityChange = (productId: string, change: number, currentQty: number) => {
-    const newQty = currentQty + change;
-    if (newQty >= 1) updateQuantity(productId, newQty);
+  // ── Retailer search ───────────────────────────────────────────────────────
+  const handleRetailerSearch = (query: string) => {
+    setRetailerSearch(query);
+    if (!query.trim()) { setFilteredRetailers(retailers); return; }
+    const q = query.toLowerCase();
+    setFilteredRetailers(retailers.filter((r) =>
+      r.name.toLowerCase().includes(q) ||
+      r.address.toLowerCase().includes(q) ||
+      r.phone.toLowerCase().includes(q) ||
+      r.store_name.toLowerCase().includes(q)
+    ));
   };
 
-  const cartTotal = cart.items.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0
-  );
+  const filteredProducts = searchQuery.trim()
+    ? products.filter((p) =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.model.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : products;
 
+  // ── Place order ───────────────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
-      if (!selectedRetailer) return alert("Select a Customer first!");
-      if (cart.items.length === 0) return alert("Cart is empty!");
-  
-      setIsSubmitting(true);
-      try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`${apiUrl}/orders`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            retailerId: selectedRetailer.id,
-            retailerName: selectedRetailer.name,
-            dealerId: user?.id,
-            order_by: user?.role,
-            order_by_id: user?.id,
-            total: cart.items.reduce((sum, i) => sum + i.product.price * i.quantity, 0),
-            notes: notes || "",
-            items: cart.items.map((i) => ({
-              productId: i.product.id,
-              quantity: i.quantity,
-              price: i.product.price,
-            })),
-          }),
-        });
-        if (!res.ok) throw new Error("Failed to submit order");
-        const response = await res.json();
-        console.log("Order created:", response);
-        clearCart();
-        setIsOrderConfirmOpen(false);
-        setNotes("");
-        toast.success("Order submitted successfully!");
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to submit order.");
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
+    if (!selectedRetailer) { toast.error("Select a customer first!"); return; }
+    if (!cart.items.length) { toast.error("Cart is empty!"); return; }
 
+    setIsSubmitting(true);
+    try {
+      const token = localStorage.getItem("token");
+
+      // Flatten grouped cart into line items
+      const orderItems = cart.items.flatMap((item) =>
+        item.variants.map((v) => ({
+          productId: item.productId,
+          variantId: v.variantId,
+          size:      v.size,
+          color:     v.color,
+          quantity:  v.quantity,
+          price:     v.price,
+          subtotal:  v.price * v.quantity,
+        }))
+      );
+
+      const res = await fetch(`${apiUrl}/orders`, {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          retailerId:   selectedRetailer.id,
+          retailerName: selectedRetailer.name,
+          dealerId:     user?.id,
+          order_by:     user?.role,
+          order_by_id:  user?.id,
+          total:        cartTotal,
+          notes:        notes || "",
+          items:        orderItems,
+        }),
+      });
+
+      if (!res.ok) throw new Error();
+      clearCart();
+      setIsOrderConfirmOpen(false);
+      setNotes("");
+      localStorage.removeItem("selectedRetailer");
+      toast.success("Order submitted successfully!");
+    } catch {
+      toast.error("Failed to submit order.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const avatarColors = [
+    "bg-blue-100 text-blue-700", "bg-green-100 text-green-700",
+    "bg-purple-100 text-purple-700", "bg-orange-100 text-orange-700",
+    "bg-pink-100 text-pink-700", "bg-teal-100 text-teal-700",
+  ];
+
+  // ── JSX ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen overflow-hidden">
-      <div className="w-64 fixed top-0 left-0 h-full">
-        <Sidebar />
-      </div>
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      <div className="w-64 fixed top-0 left-0 h-full z-10"><Sidebar /></div>
+
       <div className="flex-1 ml-64 flex flex-col">
         <Navbar />
-        <div className="flex-1 overflow-y-auto">
-          <div className="container mx-auto px-4 mt-4">
-            <div className="container mx-auto px-4 py-6">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                {isMobile ? (
-                  <ScrollArea className="w-full pb-2">
-                    <TabsList className="flex w-max">
-                      <TabsTrigger value="retailers">Customers</TabsTrigger>
-                      <TabsTrigger value="order">Create Order</TabsTrigger>
-                    </TabsList>
-                  </ScrollArea>
-                ) : (
-                  <TabsList className="mb-4">
-                    <TabsTrigger value="retailers">Customers</TabsTrigger>
-                    <TabsTrigger value="order">Create Order</TabsTrigger>
-                  </TabsList>
-                )}
+        <div className="flex-1 overflow-y-auto pt-16">
+          <div className="container mx-auto px-4 py-6">
 
-                <TabsContent value="retailers">
-                  <h2 className="text-2xl font-bold mb-4">Customers</h2>
-                  <SearchBar onSearch={handleRetailerSearch} />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {filteredRetailers.map((r) => (
+            {/* Header */}
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold text-gray-900">Create Order</h1>
+              <p className="text-gray-500 text-sm mt-1">Select a customer and add products to the cart</p>
+            </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              {isMobile ? (
+                <ScrollArea className="w-full pb-2">
+                  <TabsList className="flex w-max mb-4 bg-white border shadow-sm">
+                    <TabsTrigger value="retailers" className="gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                      <User size={14} /> Customers
+                    </TabsTrigger>
+                    <TabsTrigger value="order" className="gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                      <Package size={14} /> Create Order
+                    </TabsTrigger>
+                  </TabsList>
+                </ScrollArea>
+              ) : (
+                <TabsList className="mb-6 bg-white border shadow-sm">
+                  <TabsTrigger value="retailers" className="gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                    <User size={14} /> Customers
+                  </TabsTrigger>
+                  <TabsTrigger value="order" className="gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                    <Package size={14} /> Create Order
+                    {cartCount > 0 && (
+                      <span className="ml-1 bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                        {cartCount}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+              )}
+
+              {/* ── Customers Tab ── */}
+              <TabsContent value="retailers">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Select Customer</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">{retailers.length} customers available</p>
+                  </div>
+                  {selectedRetailer && (
+                    <Badge className="bg-green-100 text-green-700 border-green-200 gap-1.5">
+                      <Store size={12} /> {selectedRetailer.store_name} selected
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="relative mb-4 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search customers..."
+                    value={retailerSearch}
+                    onChange={(e) => handleRetailerSearch(e.target.value)}
+                    className="pl-9 bg-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredRetailers.map((r, index) => {
+                    const isSelected = selectedRetailer?.id === r.id;
+                    return (
                       <Card
                         key={r.id}
-                        onClick={() => setSelectedRetailer(r)}
-                        className={`relative p-4 cursor-pointer transition ${
-                          selectedRetailer?.id === r.id
-                            ? "border-blue-500 shadow-lg"
-                            : "hover:shadow"
+                        onClick={() => {
+                          setSelectedRetailer(r);
+                          localStorage.setItem("selectedRetailer", JSON.stringify(r));
+                        }}
+                        className={`p-4 cursor-pointer transition-all duration-200 ${
+                          isSelected
+                            ? "border-blue-500 border-2 bg-blue-50 shadow-md"
+                            : "hover:shadow-md hover:border-blue-200 bg-white"
                         }`}
                       >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="font-semibold">{r.store_name}</p>
-                            <p className="text-sm text-gray-500">
-                              {r.name} ({r.phone})
+                        <div className="flex items-start gap-3">
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${avatarColors[index % avatarColors.length]}`}>
+                            {r.store_name?.charAt(0)?.toUpperCase() || "?"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-semibold text-gray-900 text-sm truncate">{r.store_name}</p>
+                              {isSelected && <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0" />}
+                            </div>
+                            <p className="text-xs text-gray-500 truncate">{r.name}</p>
+                            <p className="text-xs text-gray-400 flex items-center gap-1 mt-1 truncate">
+                              <MapPin size={10} /> {r.address}
                             </p>
-                            <p className="text-sm text-gray-500">{r.address}</p>
+                            <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                              <Phone size={10} /> {r.phone}
+                            </p>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation(); // prevent card click
-                                setSelectedRetailer(r); // select retailer if needed
-                                setActiveTab("order"); // switch to order tab
-                              }}
-                              className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition"
-                            >
-                              Create Order
-                            </button>
+                        </div>
 
-                            <a
-                              href={`tel:${r.phone}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="sm:hidden flex items-center justify-center bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600 transition"
-                            >
-                              <Phone size={18} />
-                            </a>
-                            <a
-                              href={`https://www.google.com/maps?q=${encodeURIComponent(
-                                r.address
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex items-center justify-center bg-green-500 text-white rounded-full p-2 hover:bg-green-600 transition"
-                            >
-                              <MapPin size={18} />
-                            </a>
-                          </div>
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                          <Button
+                            size="sm"
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedRetailer(r);
+                              localStorage.setItem("selectedRetailer", JSON.stringify(r));
+                              setActiveTab("order");
+                            }}
+                          >
+                            <ShoppingCart size={12} className="mr-1" /> Create Order
+                          </Button>
+                          <a
+                            href={`tel:${r.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-8 w-8 flex items-center justify-center rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+                          >
+                            <Phone size={13} />
+                          </a>
+                          <a
+                            href={`https://www.google.com/maps?q=${encodeURIComponent(r.address)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-8 w-8 flex items-center justify-center rounded-md bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
+                          >
+                            <MapPin size={13} />
+                          </a>
                         </div>
                       </Card>
-                    ))}
-                  </div>
-                </TabsContent>
-                <TabsContent value="order">
-                  <h2 className="text-2xl font-bold mb-4 text-foreground">Create Order</h2>
+                    );
+                  })}
 
-                  {/* ⭐ SELECTED CUSTOMER DISPLAY */}
-                  {!selectedRetailer ? (
-                    <p className="text-red-500 mb-6">
-                      Please select a customer from the "Customers" tab first.
-                    </p>
-                  ) : (
-                    <div className="mb-6 bg-white p-4 rounded-md shadow-sm border">
-                      <h3 className="font-semibold text-lg">
-                        Customer: {selectedRetailer.store_name}
-                      </h3>
-                      <p className="text-gray-500 text-sm">{selectedRetailer.city}</p>
+                  {filteredRetailers.length === 0 && (
+                    <div className="col-span-3 text-center py-16 text-gray-400">
+                      <User className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">No customers found</p>
                     </div>
                   )}
+                </div>
+              </TabsContent>
 
-                  {/* Search bar + Voice button */}
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="relative flex-1 max-w-md">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="text"
-                        placeholder="Search by name, brand, or model..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
+              {/* ── Create Order Tab ── */}
+              <TabsContent value="order">
+                {/* Selected customer banner */}
+                {!selectedRetailer ? (
+                  <div className="mb-5 flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
+                    <span className="text-yellow-500 text-lg">⚠️</span>
+                    <p className="text-sm text-yellow-700">
+                      Please select a customer from the <strong>Customers</strong> tab first.
+                    </p>
+                    <Button size="sm" variant="outline" className="ml-auto border-yellow-300 text-yellow-700 hover:bg-yellow-100" onClick={() => setActiveTab("retailers")}>
+                      Go to Customers
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mb-5 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                    <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm flex-shrink-0">
+                      {selectedRetailer.store_name?.charAt(0)?.toUpperCase()}
                     </div>
-                    <VoiceMicButton
-                      voiceState={voiceState}
-                      onStart={handleVoiceStart}
-                      onStop={stopListening}
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-blue-900">{selectedRetailer.store_name}</p>
+                      <p className="text-xs text-blue-600">{selectedRetailer.name} · {selectedRetailer.phone}</p>
+                    </div>
+                    <Button size="sm" variant="ghost" className="text-blue-600 hover:bg-blue-100 text-xs" onClick={() => setActiveTab("retailers")}>
+                      Change
+                    </Button>
+                  </div>
+                )}
+
+                {/* Search + Voice */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search by name, brand, or model..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 bg-white"
                     />
                   </div>
+                  <VoiceMicButton voiceState={voiceState} onStart={handleVoiceStart} onStop={stopListening} />
+                </div>
 
-                  {/* Live transcript display */}
-                  {(voiceState === "listening" || voiceState === "processing") && rawTranscript && (
-                    <div className="mb-4 p-3 rounded-lg bg-muted animate-in fade-in duration-300">
-                      <p className="text-xs text-muted-foreground mb-1">
-                        {voiceState === "listening" ? "Hearing:" : "Processing:"}
-                      </p>
-                      <p className="text-sm italic text-foreground">"{rawTranscript}"</p>
-                    </div>
-                  )}
-
-                  {/* Error display (for errors without transcript) */}
-                  {voiceState === "error" && !rawTranscript && errorMessage && (
-                    <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 animate-in fade-in duration-300">
-                      <p className="text-sm text-destructive">{errorMessage}</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={resetVoice}
-                      >
-                        Try Again
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Product Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {filteredProducts.map((product) => {
-                      const cartItem = cart.items.find((i) => i.product.id === product.id);
-                      return (
-                        <Card key={product.id} className="p-4 hover:shadow-md transition-shadow">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h3 className="font-semibold text-sm text-foreground">{product.name}</h3>
-                              <p className="text-xs text-muted-foreground">
-                                {product.brand} • {product.model}
-                              </p>
-                            </div>
-                            <span className="font-bold text-primary text-sm">
-                              ₹{product.price.toLocaleString("en-IN")}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between mt-3">
-                            <Badge variant="secondary" className="text-xs">
-                              Stock: {product.stock}
-                            </Badge>
-                            {cartItem ? (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0"
-                                  onClick={() =>
-                                    handleQuantityChange(product.id, -1, cartItem.quantity)
-                                  }
-                                >
-                                  <Minus size={12} />
-                                </Button>
-                                <span className="text-sm w-8 text-center font-medium">
-                                  {cartItem.quantity}
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0"
-                                  onClick={() =>
-                                    handleQuantityChange(product.id, 1, cartItem.quantity)
-                                  }
-                                >
-                                  <Plus size={12} />
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => addToCart(product, 1)}
-                              >
-                                <Plus size={14} className="mr-1" />
-                                Add
-                              </Button>
-                            )}
-                          </div>
-                        </Card>
-                      );
-                    })}
+                {/* Live transcript */}
+                {(voiceState === "listening" || voiceState === "processing") && rawTranscript && (
+                  <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-100">
+                    <p className="text-xs text-blue-400 mb-1">{voiceState === "listening" ? "Hearing:" : "Processing:"}</p>
+                    <p className="text-sm italic text-blue-700">"{rawTranscript}"</p>
                   </div>
+                )}
+                {voiceState === "error" && !rawTranscript && errorMessage && (
+                  <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100">
+                    <p className="text-sm text-red-600">{errorMessage}</p>
+                    <Button variant="outline" size="sm" className="mt-2" onClick={resetVoice}>Try Again</Button>
+                  </div>
+                )}
 
-                  {filteredProducts.length === 0 && (
-                    <p className="text-center py-8 text-muted-foreground">No products found.</p>
-                  )}
+                {!loadingProducts && (
+                  <p className="text-xs text-gray-400 mb-3">
+                    {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} {searchQuery ? "found" : "available"}
+                  </p>
+                )}
 
-                  {/* Cart Summary */}
-                  {cart.items.length > 0 && (
-                    <Card className="mt-6 p-4 shadow-md max-w-lg">
-                      <h3 className="text-lg font-bold mb-3 text-foreground">Cart Summary</h3>
-                      <ul className="divide-y divide-border mb-4">
-                        {cart.items.map((item) => (
-                          <li
-                            key={item.product.id}
-                            className="py-2 flex justify-between items-center"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm text-foreground">{item.product.name}</span>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() =>
-                                    handleQuantityChange(item.product.id, -1, item.quantity)
-                                  }
-                                  className="p-1 border rounded hover:bg-muted"
-                                >
-                                  <Minus size={12} />
-                                </button>
-                                <span className="px-2 text-sm">{item.quantity}</span>
-                                <button
-                                  onClick={() =>
-                                    handleQuantityChange(item.product.id, 1, item.quantity)
-                                  }
-                                  className="p-1 border rounded hover:bg-muted"
-                                >
-                                  <Plus size={12} />
-                                </button>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-medium">
-                                ₹{(item.product.price * item.quantity).toLocaleString("en-IN")}
-                              </span>
-                              <button
-                                onClick={() => removeFromCart(item.product.id)}
-                                className="text-destructive hover:text-destructive/80"
-                              >
-                                <Trash2 size={14} />
+                {/* Products grid */}
+                {loadingProducts ? (
+                  <div className="text-center py-16 text-gray-400">
+                    <Package className="h-10 w-10 mx-auto mb-3 opacity-30 animate-pulse" />
+                    <p className="text-sm">Loading products...</p>
+                  </div>
+                ) : productsError ? (
+                  <div className="text-center py-16 text-red-400"><p className="text-sm">{productsError}</p></div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredProducts.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                    {filteredProducts.length === 0 && (
+                      <div className="text-center py-16 text-gray-400">
+                        <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">No products found.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Cart Summary (grouped) ── */}
+                {cart.items.length > 0 && (
+                  <Card className="mt-6 p-5 shadow-md bg-white border-gray-100 max-w-lg">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                        <ShoppingCart size={16} className="text-blue-600" />
+                        Cart Summary
+                      </h3>
+                      <Badge variant="secondary" className="text-xs">{cartCount} item{cartCount !== 1 ? "s" : ""}</Badge>
+                    </div>
+
+                    <div className="space-y-3 mb-4">
+                      {cart.items.map((item) => {
+                        const itemTotal = item.variants.reduce((s, v) => s + v.price * v.quantity, 0);
+                        return (
+                          <div key={item.productId} className="border border-gray-100 rounded-lg overflow-hidden">
+                            {/* Product header */}
+                            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                              <p className="text-sm font-semibold text-gray-900 flex-1 truncate">{item.productName}</p>
+                              <span className="text-sm font-bold text-blue-600 flex-shrink-0">₹{itemTotal.toLocaleString("en-IN")}</span>
+                              <button onClick={() => removeFromCart(item.productId)} className="text-red-400 hover:text-red-600 flex-shrink-0 ml-1">
+                                <Trash2 size={13} />
                               </button>
                             </div>
-                          </li>
-                        ))}
-                      </ul>
-                      <Separator className="my-2" />
-                      <div className="flex justify-between font-semibold text-foreground">
-                        <span>Total</span>
-                        <span>₹{cartTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <Button
-                        onClick={() => setIsOrderConfirmOpen(true)}
-                        className="w-full mt-4"
-                      >
-                        Place Order
-                      </Button>
-                    </Card>
-                  )}
-                </TabsContent>
-              </Tabs>
+                            {/* Variant rows */}
+                            {item.variants.map((v) => (
+                              <div key={`${item.productId}_${v.variantId}`} className="flex items-center gap-2 px-3 py-1.5">
+                                <div className="flex items-center gap-1 flex-1 min-w-0">
+                                  {v.size && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">{v.size}</span>}
+                                  {v.color && <span className="text-xs text-gray-400 truncate">{v.color}</span>}
+                                  {!v.size && !v.color && <span className="text-xs text-gray-400">Standard</span>}
+                                </div>
+                                <span className="text-xs text-gray-400 flex-shrink-0">₹{v.price}</span>
+                                <div className="flex items-center border border-gray-200 rounded overflow-hidden flex-shrink-0">
+                                  <button
+                                    onClick={() => v.variantId === 0 ? updateQuantity(item.productId, v.quantity - 1) : updateVariantQty(item.productId, v.variantId, v.quantity - 1)}
+                                    className="px-1.5 py-1 text-gray-500 hover:bg-gray-50"
+                                  ><Minus size={10} /></button>
+                                  <span className="px-2 text-xs font-medium text-gray-800 min-w-[20px] text-center">{v.quantity}</span>
+                                  <button
+                                    onClick={() => v.variantId === 0 ? updateQuantity(item.productId, v.quantity + 1) : updateVariantQty(item.productId, v.variantId, v.quantity + 1)}
+                                    disabled={v.quantity >= v.stock}
+                                    className="px-1.5 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+                                  ><Plus size={10} /></button>
+                                </div>
+                                <span className="text-xs font-semibold text-gray-800 w-16 text-right flex-shrink-0">₹{(v.price * v.quantity).toLocaleString("en-IN")}</span>
+                                <button
+                                  onClick={() => v.variantId === 0 ? removeFromCart(item.productId) : removeVariant(item.productId, v.variantId)}
+                                  className="text-red-400 hover:text-red-600 flex-shrink-0"
+                                ><X size={11} /></button>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
 
-              {/* Voice Fallback Modal */}
-              <VoiceFallbackModal
-                open={showFallbackModal}
-                onClose={() => {
-                  setShowFallbackModal(false);
-                  resetVoice();
-                }}
-                parseResult={parseResult}
-                rawTranscript={rawTranscript}
-                products={products}
-                onReprocess={reprocessTranscript}
-                onConfirmItems={handleConfirmItems}
-                errorMessage={errorMessage}
-              />
+                    <Separator className="my-3" />
+                    <div className="flex justify-between font-bold text-gray-900 text-sm mb-4">
+                      <span>Total</span>
+                      <span className="text-blue-600 text-base">₹{cartTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                    </div>
 
-              {/* Order Confirmation Dialog */}
-              <Dialog open={isOrderConfirmOpen} onOpenChange={setIsOrderConfirmOpen}>
-                <DialogContent className="max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle>Confirm Order</DialogTitle>
-                    <DialogDescription>
-                      Review your order details before submitting.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-2">
-                    <div className="space-y-1 text-sm">
-                      {cart.items.map((item) => (
-                        <div key={item.product.id} className="flex justify-between">
-                          <span>
-                            {item.product.name} x {item.quantity}
-                          </span>
-                          <span>₹{(item.product.price * item.quantity).toLocaleString("en-IN")}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between font-semibold">
-                      <span>Total:</span>
-                      <span>₹{cartTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Notes (Optional)</label>
-                      <Textarea
-                        placeholder="Add special instructions..."
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        className="h-20 mt-1"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsOrderConfirmOpen(false)}>
-                      Cancel
-                    </Button>
                     <Button
-                      onClick={handlePlaceOrder}
-                      className="bg-blue-600 hover:bg-blue-700"
-                      disabled={isSubmitting}
+                      onClick={() => setIsOrderConfirmOpen(true)}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                      disabled={!selectedRetailer}
                     >
-                      {isSubmitting ? "Submitting..." : "Submit Order"}
+                      <ShoppingCart size={15} />
+                      {selectedRetailer ? "Place Order" : "Select a Customer First"}
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            {/* Voice Fallback Modal */}
+            <VoiceFallbackModal
+              open={showFallbackModal}
+              onClose={() => { setShowFallbackModal(false); resetVoice(); }}
+              parseResult={parseResult}
+              rawTranscript={rawTranscript}
+              products={products}
+              onReprocess={reprocessTranscript}
+              onConfirmItems={handleConfirmItems}
+              errorMessage={errorMessage}
+            />
+
+            {/* Order Confirmation Dialog */}
+            <Dialog open={isOrderConfirmOpen} onOpenChange={setIsOrderConfirmOpen}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <ShoppingCart className="h-4 w-4 text-blue-600" />
+                    </div>
+                    Confirm Order
+                  </DialogTitle>
+                  <DialogDescription>Review your order before submitting.</DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-2">
+                  {selectedRetailer && (
+                    <div className="flex items-center gap-3 bg-blue-50 rounded-lg px-3 py-2">
+                      <Store size={15} className="text-blue-500 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-900">{selectedRetailer.store_name}</p>
+                        <p className="text-xs text-blue-600">{selectedRetailer.name}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Order line items */}
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                    {cart.items.map((item) =>
+                      item.variants.map((v) => (
+                        <div key={`${item.productId}_${v.variantId}`} className="flex justify-between text-sm">
+                          <span className="text-gray-700 flex items-center gap-1.5">
+                            {item.productName}
+                            {v.size && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full font-medium">{v.size}</span>
+                            )}
+                            <span className="text-gray-400">×{v.quantity}</span>
+                          </span>
+                          <span className="font-medium text-gray-900 flex-shrink-0">
+                            ₹{(v.price * v.quantity).toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <Separator />
+                  <div className="flex justify-between font-bold text-gray-900">
+                    <span>Total</span>
+                    <span className="text-blue-600">₹{cartTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Notes (Optional)</label>
+                    <Textarea
+                      placeholder="Add special instructions..."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      className="h-20 mt-1 resize-none"
+                    />
+                  </div>
+                </div>
+
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => setIsOrderConfirmOpen(false)}>Cancel</Button>
+                  <Button onClick={handlePlaceOrder} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={isSubmitting}>
+                    {isSubmitting ? "Submitting..." : "Submit Order"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
           </div>
         </div>
       </div>

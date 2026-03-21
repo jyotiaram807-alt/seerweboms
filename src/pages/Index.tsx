@@ -15,7 +15,7 @@ const Index = () => {
       } else if (user?.role === "dealer") {
         navigate("/dealer");
       } else {
-        navigate("/home");
+        navigate("/retailer/dashboard");
       }
     }
   }, [isAuthenticated, user?.role, navigate]);

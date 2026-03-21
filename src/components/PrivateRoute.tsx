@@ -18,7 +18,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, requiredRole }) =
     // Redirect to their appropriate dashboard if they hit a route they don't have access to
     if (user?.role === "admin") return <Navigate to="/admin" replace />;
     if (user?.role === "dealer") return <Navigate to="/dealer" replace />;
-    if (user?.role === "retailer") return <Navigate to="/home" replace />;
+    if (user?.role === "retailer") return <Navigate to="/retailer/dashboard" replace />;
   }
 
   return children;

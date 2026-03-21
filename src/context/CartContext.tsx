@@ -1,86 +1,285 @@
 import { createContext, useState, useContext, ReactNode, useEffect } from "react";
-import { Cart, CartItem, Product } from "../types";
+import { Cart, CartItem, CartVariantItem, Product, ProductVariant } from "../types";
 import { toast } from "sonner";
 
+// ── Context type ──────────────────────────────────────────────────────────────
+
 interface CartContextType {
-  cart: Cart;
-  addToCart: (product: Product, quantity: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  clearCart: () => void;
+  cart:              Cart;
+  addToCart:         (product: Product, quantity: number) => void;
+  addVariantToCart:  (product: Product, variant: ProductVariant, quantity: number) => void;
+  removeFromCart:    (productId: string) => void;
+  removeVariant:     (productId: string, variantId: number) => void;
+  updateQuantity:    (productId: string, quantity: number) => void;
+  updateVariantQty:  (productId: string, variantId: number, quantity: number) => void;
+  clearCart:         () => void;
+  cartCount:         number;
+  cartTotal:         number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-export const CartProvider = ({ children }: { children: ReactNode }) => {
-  const [cart, setCart] = useState<Cart>({ items: [], total: 0 });
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
+const getCartKey = (userId?: string | null) =>
+  userId ? `cart_${userId}` : "cart_guest";
+
+const calcTotal = (items: CartItem[]): number =>
+  items.reduce(
+    (sum, item) =>
+      sum + item.variants.reduce((s, v) => s + v.price * v.quantity, 0),
+    0
+  );
+
+const calcCount = (items: CartItem[]): number =>
+  items.reduce(
+    (sum, item) => sum + item.variants.reduce((s, v) => s + v.quantity, 0),
+    0
+  );
+
+// ── Provider ──────────────────────────────────────────────────────────────────
+
+export const CartProvider = ({ children }: { children: ReactNode }) => {
+  const [cart, setCart]     = useState<Cart>({ items: [], total: 0 });
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // ── On mount: load cart for current user ─────────────────────────────────
   useEffect(() => {
-    const savedCart = localStorage.getItem("cart");
-    if (savedCart) {
-      try {
-        setCart(JSON.parse(savedCart));
-      } catch (error) {
-        console.error("Failed to parse saved cart:", error);
-      }
+    try {
+      const stored = localStorage.getItem("user");
+      const id     = stored ? String(JSON.parse(stored)?.id ?? "") || null : null;
+      setUserId(id);
+      const saved = localStorage.getItem(getCartKey(id));
+      setCart(saved ? JSON.parse(saved) : { items: [], total: 0 });
+    } catch {
+      setCart({ items: [], total: 0 });
     }
   }, []);
 
+  // ── Persist on every change ───────────────────────────────────────────────
   useEffect(() => {
-    localStorage.setItem("cart", JSON.stringify(cart));
-  }, [cart]);
+    localStorage.setItem(getCartKey(userId), JSON.stringify(cart));
+  }, [cart, userId]);
 
-  const calculateTotal = (items: CartItem[]): number => {
-    return items.reduce((total, item) => total + item.product.price * item.quantity, 0);
+  // ── Auth events: switch / clear cart on login / logout ───────────────────
+  useEffect(() => {
+    const handleLogin = (e: CustomEvent) => {
+      const newId = String(e.detail.userId);
+      setUserId(newId);
+      const saved = localStorage.getItem(getCartKey(newId));
+      setCart(saved ? JSON.parse(saved) : { items: [], total: 0 });
+    };
+
+    const handleLogout = (e: CustomEvent) => {
+      const oldId = String(e.detail.userId);
+      localStorage.removeItem(getCartKey(oldId));
+      setUserId(null);
+      setCart({ items: [], total: 0 });
+    };
+
+    window.addEventListener("userLogin",  handleLogin  as EventListener);
+    window.addEventListener("userLogout", handleLogout as EventListener);
+    return () => {
+      window.removeEventListener("userLogin",  handleLogin  as EventListener);
+      window.removeEventListener("userLogout", handleLogout as EventListener);
+    };
+  }, []);
+
+  // ── addVariantToCart — for products that have size variants ──────────────
+  const addVariantToCart = (product: Product, variant: ProductVariant, quantity: number) => {
+    if (quantity <= 0) return;
+
+    const pId  = String(product.id);
+    const vItem: CartVariantItem = {
+      variantId: variant.id,
+      size:      variant.size  || "",
+      color:     variant.color || "",
+      price:     variant.rate  || variant.mrp || product.price,
+      mrp:       variant.mrp   || product.price,
+      quantity,
+      stock:     variant.qty,
+    };
+
+    setCart((prev) => {
+      const existingProduct = prev.items.find((i) => i.productId === pId);
+
+      let newItems: CartItem[];
+      if (existingProduct) {
+        // Product already in cart — update or add variant
+        const hasVariant = existingProduct.variants.find((v) => v.variantId === variant.id);
+        newItems = prev.items.map((item) =>
+          item.productId !== pId
+            ? item
+            : {
+                ...item,
+                variants: hasVariant
+                  ? item.variants.map((v) =>
+                      v.variantId === variant.id
+                        ? { ...v, quantity: v.quantity + quantity }
+                        : v
+                    )
+                  : [...item.variants, vItem],
+              }
+        );
+      } else {
+        // New product
+        newItems = [
+          ...prev.items,
+          {
+            productId:   pId,
+            productName: product.name,
+            image:       product.image ?? null,
+            brand:       product.brand || product.attributes?.brand || "",
+            variants:    [vItem],
+          },
+        ];
+      }
+
+      toast.success(
+        `Added ${quantity}× ${product.name}${variant.size ? ` (${variant.size})` : ""}`
+      );
+      return { items: newItems, total: calcTotal(newItems) };
+    });
   };
 
+  // ── addToCart — for products WITHOUT variants (simple product) ────────────
   const addToCart = (product: Product, quantity: number) => {
     if (quantity <= 0) return;
-    setCart((prevCart) => {
-      const existingItemIndex = prevCart.items.findIndex(
-        (item) => item.product.id === product.id
-      );
-      let newItems: CartItem[];
-      if (existingItemIndex >= 0) {
-        newItems = [...prevCart.items];
-        newItems[existingItemIndex] = {
-          ...newItems[existingItemIndex],
-          quantity: newItems[existingItemIndex].quantity + quantity,
-        };
-      } else {
-        newItems = [...prevCart.items, { product, quantity }];
-      }
-      return { items: newItems, total: calculateTotal(newItems) };
-    });
-    toast.success(`Added ${quantity}x ${product.name} to cart`);
-  };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prevCart) => {
-      const newItems = prevCart.items.filter((item) => item.product.id !== productId);
-      return { items: newItems, total: calculateTotal(newItems) };
-    });
-  };
-
-  const updateQuantity = (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
-      return;
+    // If product has variants, delegate to addVariantToCart
+    if (product.variants && product.variants.length > 0) {
+      // Add all variants or just call addVariantToCart for each — here we
+      // treat the whole product as a single "no-size" variant (variantId = 0)
     }
-    setCart((prevCart) => {
-      const newItems = prevCart.items.map((item) =>
-        item.product.id === productId ? { ...item, quantity } : item
+
+    const pId = String(product.id);
+    const vItem: CartVariantItem = {
+      variantId: 0,           // 0 = no variant
+      size:      product.attributes?.size  || "",
+      color:     product.attributes?.color || "",
+      price:     product.price,
+      mrp:       Number(product.attributes?.mrp) || product.price,
+      quantity,
+      stock:     product.stock,
+    };
+
+    setCart((prev) => {
+      const existingProduct = prev.items.find((i) => i.productId === pId);
+
+      let newItems: CartItem[];
+      if (existingProduct) {
+        // Update quantity of the single variant (variantId 0)
+        newItems = prev.items.map((item) =>
+          item.productId !== pId
+            ? item
+            : {
+                ...item,
+                variants: item.variants.some((v) => v.variantId === 0)
+                  ? item.variants.map((v) =>
+                      v.variantId === 0 ? { ...v, quantity: v.quantity + quantity } : v
+                    )
+                  : [...item.variants, vItem],
+              }
+        );
+      } else {
+        newItems = [
+          ...prev.items,
+          {
+            productId:   pId,
+            productName: product.name,
+            image:       product.image ?? null,
+            brand:       product.brand || product.attributes?.brand || "",
+            variants:    [vItem],
+          },
+        ];
+      }
+
+      toast.success(`Added ${quantity}× ${product.name} to cart`);
+      return { items: newItems, total: calcTotal(newItems) };
+    });
+  };
+
+  // ── removeFromCart — remove entire product (all sizes) ───────────────────
+  const removeFromCart = (productId: string) => {
+    setCart((prev) => {
+      const newItems = prev.items.filter((i) => i.productId !== productId);
+      return { items: newItems, total: calcTotal(newItems) };
+    });
+  };
+
+  // ── removeVariant — remove one size from a product ───────────────────────
+  const removeVariant = (productId: string, variantId: number) => {
+    setCart((prev) => {
+      const newItems = prev.items
+        .map((item) =>
+          item.productId !== productId
+            ? item
+            : { ...item, variants: item.variants.filter((v) => v.variantId !== variantId) }
+        )
+        .filter((item) => item.variants.length > 0); // remove product if no variants left
+      return { items: newItems, total: calcTotal(newItems) };
+    });
+  };
+
+  // ── updateQuantity — update qty of the single (no-variant) product ───────
+  const updateQuantity = (productId: string, quantity: number) => {
+    if (quantity <= 0) { removeFromCart(productId); return; }
+    setCart((prev) => {
+      const newItems = prev.items.map((item) =>
+        item.productId !== productId
+          ? item
+          : {
+              ...item,
+              variants: item.variants.map((v) =>
+                v.variantId === 0 ? { ...v, quantity } : v
+              ),
+            }
       );
-      return { items: newItems, total: calculateTotal(newItems) };
+      return { items: newItems, total: calcTotal(newItems) };
+    });
+  };
+
+  // ── updateVariantQty — update qty of a specific size ─────────────────────
+  const updateVariantQty = (productId: string, variantId: number, quantity: number) => {
+    if (quantity <= 0) { removeVariant(productId, variantId); return; }
+    setCart((prev) => {
+      const newItems = prev.items.map((item) =>
+        item.productId !== productId
+          ? item
+          : {
+              ...item,
+              variants: item.variants.map((v) =>
+                v.variantId === variantId ? { ...v, quantity } : v
+              ),
+            }
+      );
+      return { items: newItems, total: calcTotal(newItems) };
     });
   };
 
   const clearCart = () => {
     setCart({ items: [], total: 0 });
+    localStorage.removeItem(getCartKey(userId));
   };
 
+  const cartCount = calcCount(cart.items);
+  const cartTotal = calcTotal(cart.items);
+
   return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, clearCart }}>
+    <CartContext.Provider
+      value={{
+        cart,
+        addToCart,
+        addVariantToCart,
+        removeFromCart,
+        removeVariant,
+        updateQuantity,
+        updateVariantQty,
+        clearCart,
+        cartCount,
+        cartTotal,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );

@@ -85,7 +85,7 @@ const RetailerOrders = () => {
       <Navbar />
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pt-16">
         <div className="container mx-auto px-4 mt-4 mb-6">
           <p className="text-gray-600 text-lg mb-4">Track your order history and status</p>
 

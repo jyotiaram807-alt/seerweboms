@@ -22,55 +22,69 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 1 day
 
   // ---------------- LOGIN ----------------
-  const login = async (username: string, password: string): Promise<boolean> => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${apiUrl}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
+ // ---------------- LOGIN ----------------
+const login = async (username: string, password: string): Promise<boolean> => {
+  setLoading(true);
+  try {
+    const res = await fetch(`${apiUrl}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
 
-      if (!res.ok) throw new Error("Login failed");
+    if (!res.ok) throw new Error("Login failed");
 
-      const result = await res.json();
-      const { token, user } = result;
+    const result = await res.json();
+    const { token, user } = result;
 
-      if (!token || !user) throw new Error("Missing token or user data");
+    if (!token || !user) throw new Error("Missing token or user data");
 
-      // ✅ Store token & user in localStorage
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-      localStorage.setItem("tokenTimestamp", Date.now().toString());
-      setUser(user);
+    localStorage.setItem("token",          token);
+    localStorage.setItem("user",           JSON.stringify(user));
+    localStorage.setItem("tokenTimestamp", Date.now().toString());
+    setUser(user);
 
-      // ✅ Redirect based on role
-      redirectUser(user);
+    // ── Notify CartContext to load this user's cart ──────────────────────
+    window.dispatchEvent(
+      new CustomEvent("userLogin", { detail: { userId: String(user.id) } })
+    );
 
-      return true;
-    } catch (error) {
-      console.error("Login failed:", error);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
+    redirectUser(user);
+    return true;
+  } catch (error) {
+    console.error("Login failed:", error);
+    return false;
+  } finally {
+    setLoading(false);
+  }
+};
 
-  // ---------------- LOGOUT ----------------
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("tokenTimestamp");
-    navigate("/", { replace: true });
-  };
+// ---------------- LOGOUT ----------------
+const logout = () => {
+  const currentUserId = user?.id ? String(user.id) : null;
+
+  setUser(null);
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  localStorage.removeItem("tokenTimestamp");
+  localStorage.removeItem("selectedRetailer");
+
+  // ── Notify CartContext to clear this user's cart ─────────────────────
+  if (currentUserId) {
+    window.dispatchEvent(
+      new CustomEvent("userLogout", { detail: { userId: currentUserId } })
+    );
+  }
+
+  navigate("/", { replace: true });
+};
 
   // ---------------- REDIRECT USER ----------------
   const redirectUser = (user: User) => {
     const { role, sub_role } = user;
     if (role === "staff" && sub_role === "executive") navigate("/staff", { replace: true });
     else if (role === "dealer") navigate("/dealer", { replace: true });
-    else if (role === "retailer") navigate("/home", { replace: true });
+    else if (role === "retailer") navigate("/retailer/dashboard", { replace: true });
     else navigate("/", { replace: true });
   };
 
@@ -114,8 +128,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           navigate("/staff", { replace: true });
         else if (role === "dealer" && !location.pathname.startsWith("/dealer"))
           navigate("/dealer", { replace: true });
-        else if (role === "retailer" && !location.pathname.startsWith("/home"))
-          navigate("/home", { replace: true });
+        else if (role === "retailer" && !location.pathname.startsWith("/retailer/dashboard"))
+          navigate("/retailer/dashboard", { replace: true });
       } catch (error) {
         console.warn("Session invalid:", error);
         logout();

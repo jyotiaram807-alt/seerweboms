@@ -68,7 +68,7 @@ const TakeOrder = () => {
       return;
     }
     if (user?.role !== "dealer") {
-      navigate("/home");
+      navigate("/retailer/dashboard");
       return;
     }
   }, [isAuthenticated, user, navigate]);
