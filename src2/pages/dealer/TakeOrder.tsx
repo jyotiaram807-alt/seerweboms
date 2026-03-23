@@ -97,29 +97,7 @@ const TakeOrder = () => {
         });
         if (!res.ok) throw new Error();
         const data = await res.json();
-        // Format products with proper typing and business_type_id
-        const formatted: Product[] = (data.products || data).map((item: any) => {
-          let attrs: Record<string, string> = {};
-          if (item.attributes) {
-            attrs = typeof item.attributes === "string" ? JSON.parse(item.attributes) : item.attributes;
-          }
-          return {
-            id:               String(item.id),
-            name:             item.name || "",
-            brand:            item.brand || attrs.brand || "",
-            model:            item.model || attrs.model || "",
-            price:            Number(item.price),
-            stock:            Number(item.stock),
-            description:      item.description || "",
-            dealer_id:        Number(item.dealerid),
-            dealerid:         Number(item.dealerid),
-            image:            item.image || null,
-            attributes:       attrs,
-            business_type_id: item.business_type_id ?? null,
-            variants:         item.variants ?? [],
-          };
-        });
-        setProducts(formatted);
+        setProducts(data.products || data);
       } catch {
         setProductsError("Unable to load products");
       } finally {
@@ -196,24 +174,16 @@ const TakeOrder = () => {
     try {
       const token = localStorage.getItem("token");
 
-      // Flatten grouped cart into line items with attribute snapshots
+      // Flatten grouped cart into line items
       const orderItems = cart.items.flatMap((item) =>
         item.variants.map((v) => ({
-          productId:          item.productId,
-          variantId:          v.variantId,
-          size:               v.size,
-          color:              v.color,
-          quantity:           v.quantity,
-          price:              v.price,
-          subtotal:           v.price * v.quantity,
-          rack:               v.rack || "",
-          // Include attribute snapshot for business-type-specific data
-          attributes_snapshot: {
-            ...item.attributes,
-            brand:            item.brand,
-            model:            item.model || "",
-            business_type_id: item.businessTypeId,
-          },
+          productId: item.productId,
+          variantId: v.variantId,
+          size:      v.size,
+          color:     v.color,
+          quantity:  v.quantity,
+          price:     v.price,
+          subtotal:  v.price * v.quantity,
         }))
       );
 

@@ -93,12 +93,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     const vItem: CartVariantItem = {
       variantId: variant.id,
       size:      variant.size  || "",
-      color:     variant.color || product.attributes?.color || "",
+      color:     variant.color || "",
       price:     variant.rate  || variant.mrp || product.price,
       mrp:       variant.mrp   || product.price,
       quantity,
       stock:     variant.qty,
-      rack:      variant.rack  || "",
     };
 
     setCart((prev) => {
@@ -123,18 +122,15 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
               }
         );
       } else {
-        // New product - include all attributes
+        // New product
         newItems = [
           ...prev.items,
           {
-            productId:      pId,
-            productName:    product.name,
-            image:          product.image ?? null,
-            brand:          product.brand || product.attributes?.brand || "",
-            model:          product.model || product.attributes?.model || "",
-            businessTypeId: product.business_type_id ?? null,
-            attributes:     product.attributes ?? {},
-            variants:       [vItem],
+            productId:   pId,
+            productName: product.name,
+            image:       product.image ?? null,
+            brand:       product.brand || product.attributes?.brand || "",
+            variants:    [vItem],
           },
         ];
       }
@@ -165,7 +161,6 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       mrp:       Number(product.attributes?.mrp) || product.price,
       quantity,
       stock:     product.stock,
-      rack:      product.attributes?.rack || "",
     };
 
     setCart((prev) => {
@@ -187,18 +182,14 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
               }
         );
       } else {
-        // New product - include all attributes
         newItems = [
           ...prev.items,
           {
-            productId:      pId,
-            productName:    product.name,
-            image:          product.image ?? null,
-            brand:          product.brand || product.attributes?.brand || "",
-            model:          product.model || product.attributes?.model || "",
-            businessTypeId: product.business_type_id ?? null,
-            attributes:     product.attributes ?? {},
-            variants:       [vItem],
+            productId:   pId,
+            productName: product.name,
+            image:       product.image ?? null,
+            brand:       product.brand || product.attributes?.brand || "",
+            variants:    [vItem],
           },
         ];
       }

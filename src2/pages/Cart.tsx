@@ -116,24 +116,16 @@ const Cart = () => {
         ? (user.role === "dealer" ? user.id : user.dealer_id)
         : user.dealer_id;
 
-      // Flatten grouped cart into order line items with attribute snapshots
+      // Flatten grouped cart into order line items
       const orderItems = cart.items.flatMap((item) =>
         item.variants.map((v) => ({
-          productId:          item.productId,
-          variantId:          v.variantId,
-          size:               v.size,
-          color:              v.color,
-          quantity:           v.quantity,
-          price:              v.price,
-          subtotal:           v.price * v.quantity,
-          rack:               v.rack || "",
-          // Include attribute snapshot for business-type-specific data
-          attributes_snapshot: {
-            ...item.attributes,
-            brand:           item.brand,
-            model:           item.model || "",
-            business_type_id: item.businessTypeId,
-          },
+          productId: item.productId,
+          variantId: v.variantId,
+          size:      v.size,
+          color:     v.color,
+          quantity:  v.quantity,
+          price:     v.price,
+          subtotal:  v.price * v.quantity,
         }))
       );
 
@@ -285,11 +277,6 @@ const Cart = () => {
                             ? `${apiUrl.replace("/api", "")}/${item.image}` : null;
                           const itemTotal = item.variants.reduce((s, v) => s + v.price * v.quantity, 0);
                           const itemCount = item.variants.reduce((s, v) => s + v.quantity, 0);
-                          
-                          // Get display attributes (exclude internal fields)
-                          const displayAttrs = Object.entries(item.attributes || {})
-                            .filter(([k, v]) => v && !["size", "color", "mrp", "rack", "brand", "model"].includes(k))
-                            .slice(0, 3);
 
                           return (
                             <div key={item.productId} className="border border-gray-100 rounded-xl overflow-hidden">
@@ -304,20 +291,7 @@ const Cart = () => {
                                 )}
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-semibold text-gray-900 line-clamp-1">{item.productName}</p>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {item.brand && <p className="text-xs text-gray-400">{item.brand}</p>}
-                                    {item.model && <p className="text-xs text-gray-400">• {item.model}</p>}
-                                  </div>
-                                  {/* Show business-type-specific attributes */}
-                                  {displayAttrs.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {displayAttrs.map(([k, v]) => (
-                                        <span key={k} className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium capitalize">
-                                          {String(v)}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
+                                  {item.brand && <p className="text-xs text-gray-400">{item.brand}</p>}
                                 </div>
                                 <div className="text-right flex-shrink-0">
                                   <p className="text-sm font-bold text-blue-600">₹{itemTotal.toLocaleString("en-IN")}</p>

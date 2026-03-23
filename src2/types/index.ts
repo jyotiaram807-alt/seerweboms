@@ -71,7 +71,6 @@ export type Product = {
   dealer_id?:        number;
   dealerid?:         number;
   created_at?:       string;
-  color?:            string;
   image?:            string | null;
   attributes?:       Record<string, string>;
   business_type_id?: number | null;
@@ -88,19 +87,15 @@ export interface CartVariantItem {
   mrp:       number;
   quantity:  number;  // retailer's ordered qty
   stock:     number;  // available stock
-  rack?:     string;  // rack location
 }
 
 export interface CartItem {
-  productId:       string;
-  productName:     string;
-  image:           string | null;
-  brand:           string;
-  model?:          string;
-  name?:            string;
-  businessTypeId?: number | null;  // business type for schema lookup
-  attributes:      Record<string, string>;  // all product attributes (dynamic fields)
-  variants:        CartVariantItem[];
+  // product: string;   // ← DELETE THIS LINE
+  productId:   string;
+  productName: string;
+  image:       string | null;
+  brand:       string;
+  variants:    CartVariantItem[];
 }
 
 export interface Cart {
