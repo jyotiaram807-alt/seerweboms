@@ -556,8 +556,6 @@ const RetailerHome = () => {
           </div>
         </div>
       </div>
-
-      {/* ── Business-type-aware Cart Drawer ── */}
     </div>
   );
 };
