@@ -23,7 +23,7 @@ import VoiceMicButton from "@/components/voice/VoiceMicButton";
 import VoiceFallbackModal from "@/components/voice/VoiceFallbackModal";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
-import ProductCard from "@/components/ProductCard";
+import OmsCart from "@/components/OmsCart";
 import { useAuth } from "@/context/AuthContext";
 import { apiUrl } from "@/url";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -470,7 +470,11 @@ const TakeOrder = () => {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredProducts.map((product) => (
-                      <ProductCard key={product.id} product={product} />
+                      <OmsCart
+                        key={product.id}
+                        product={product}
+                        showSize={Number(user?.business_type_id) === 2}
+                      />
                     ))}
                     {filteredProducts.length === 0 && (
                       <div className="text-center py-16 text-gray-400">
